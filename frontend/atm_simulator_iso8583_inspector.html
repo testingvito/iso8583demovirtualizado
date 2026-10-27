@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inspector Dinámico Parasoft Virtualize & Pasarela ISO 8583 - Víctor Carreño</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        crt: {
+                            green: '#00ff66',
+                            dimGreen: '#003b15',
+                            bg: '#0a0f0d',
+                            amber: '#ffb000',
+                            red: '#ff3333'
+                        }
+                    },
+                    fontFamily: {
+                        mono: ['Courier New', 'Courier', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Retro CRT Screen Scanlines effect */
+        .crt-screen {
+            background: linear-gradient(
+                rgba(18, 16, 16, 0) 50%, 
+                rgba(0, 0, 0, 0.25) 50%
+            ), linear-gradient(
+                90deg,
+                rgba(255, 0, 0, 0.03),
+                rgba(0, 255, 0, 0.01),
+                rgba(0, 0, 255, 0.03)
+            );
+            background-size: 100% 4px, 6px 100%;
+            text-shadow: 0 0 5px currentColor;
+        }
+
+        .crt-glow {
+            box-shadow: inset 0 0 15px rgba(0, 255, 102, 0.15), 0 0 10px rgba(0, 255, 102, 0.2);
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #1a1e24;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #374151;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex flex-col">
+
+    <!-- Header Navigation -->
+    <header class="bg-slate-900 border-b border-slate-800 px-6 py-4 flex flex-wrap justify-between items-center gap-4">
+        <div class="flex items-center gap-3">
+            <div class="p-2 bg-emerald-500/10 text-emerald-400 rounded-lg border border-emerald-500/20">
+                <i data-lucide="activity" class="w-6 h-6"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-white tracking-wide">Inspector Dinámico Parasoft Virtualize <span class="text-xs font-mono bg-emerald-950 text-emerald-400 border border-emerald-800 px-2 py-0.5 rounded ml-2">ISO 8583</span></h1>
+                <p class="text-xs text-slate-400">Desarrollado por <span class="text-emerald-400 font-semibold">Víctor Carreño</span> | QA Software Engineer</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-4 flex-wrap">
+            <!-- Profile Badges & Credits -->
+            <a href="https://github.com/testingvito" target="_blank" rel="noopener noreferrer" class="hidden sm:flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-800/80 hover:bg-slate-700 border border-slate-700/80 rounded-lg transition hover:text-emerald-400">
+                <i data-lucide="github" class="w-4 h-4 text-emerald-400"></i>
+                <span>github.com/testingvito</span>
+            </a>
+
+            <!-- Server Ping Indicator -->
+            <div id="pingBadge" class="flex items-center gap-2 px-3 py-1.5 bg-red-950/80 border border-red-800 text-red-400 rounded-lg text-xs font-mono">
+                <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                <span id="pingText">HOST OFFLINE / SIN CONEXION</span>
+            </div>
+
+            <!-- Configuration Drawer Button -->
+            <button onclick="toggleConfigModal()" class="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition">
+                <i data-lucide="settings" class="w-4 h-4"></i>
+                <span>Configurar Servidor</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Grid -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- LEFT COLUMN: Dynamic Scanner & ATM (7 cols) -->
+        <section class="lg:col-span-7 flex flex-col gap-6">
+
+            <!-- Dynamic Responders Scanner Widget -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col gap-4">
+                <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="radar" class="w-5 h-5 text-emerald-400"></i>
+                        <h2 class="font-bold text-slate-100 text-sm">Escáner Dinámico de Respondedores</h2>
+                    </div>
+                    <button onclick="scanParasoftRoutes()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs rounded-lg flex items-center gap-1.5 transition">
+                        <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                        <span>Escanear Rutas Parasoft</span>
+                    </button>
+                </div>
+
+                <p class="text-xs text-slate-400">Descubrimiento en tiempo real de la batería de pruebas virtualizada:</p>
+
+                <!-- Responders Grid -->
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-3" id="respondersGrid">
+                    
+                    <!-- Route 1 -->
+                    <div id="card-authorize" class="bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col gap-1 transition">
+                        <div class="flex justify-between items-center">
+                            <span class="font-mono text-xs font-bold text-slate-200">/authorize</span>
+                            <span id="status-authorize" class="px-1.5 py-0.5 text-[9px] font-mono bg-slate-800 text-slate-400 rounded">PENDIENTE</span>
+                        </div>
+                        <span class="text-[11px] text-slate-400">Aprobada (00)</span>
+                        <span id="latency-authorize" class="text-[9px] font-mono text-slate-500">N/A</span>
+                    </div>
+
+                    <!-- Route 2 (/reject-funds) -->
+                    <div id="card-reject-funds" class="bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col gap-1 transition">
+                        <div class="flex justify-between items-center">
+                            <span class="font-mono text-xs font-bold text-slate-200">/reject-funds</span>
+                            <span id="status-reject-funds" class="px-1.5 py-0.5 text-[9px] font-mono bg-slate-800 text-slate-400 rounded">PENDIENTE</span>
+                        </div>
+                        <span class="text-[11px] text-slate-400">Fondos Insuficientes (51)</span>
+                        <span id="latency-reject-funds" class="text-[9px] font-mono text-slate-500">N/A</span>
+                    </div>
+
+                    <!-- Route 3 -->
+                    <div id="card-invalid-card" class="bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col gap-1 transition">
+                        <div class="flex justify-between items-center">
+                            <span class="font-mono text-xs font-bold text-slate-200">/invalid-card</span>
+                            <span id="status-invalid-card" class="px-1.5 py-0.5 text-[9px] font-mono bg-slate-800 text-slate-400 rounded">PENDIENTE</span>
+                        </div>
+                        <span class="text-[11px] text-slate-400">Tarjeta Inválida (14)</span>
+                        <span id="latency-invalid-card" class="text-[9px] font-mono text-slate-500">N/A</span>
+                    </div>
+
+                    <!-- Route 4 -->
+                    <div id="card-reject-expired" class="bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col gap-1 transition">
+                        <div class="flex justify-between items-center">
+                            <span class="font-mono text-xs font-bold text-slate-200">/reject-expired</span>
+                            <span id="status-reject-expired" class="px-1.5 py-0.5 text-[9px] font-mono bg-slate-800 text-slate-400 rounded">PENDIENTE</span>
+                        </div>
+                        <span class="text-[11px] text-slate-400">Tarjeta Vencida (54)</span>
+                        <span id="latency-reject-expired" class="text-[9px] font-mono text-slate-500">N/A</span>
+                    </div>
+
+                    <!-- Route 5 -->
+                    <div id="card-reject-pin" class="bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col gap-1 transition">
+                        <div class="flex justify-between items-center">
+                            <span class="font-mono text-xs font-bold text-slate-200">/reject-pin</span>
+                            <span id="status-reject-pin" class="px-1.5 py-0.5 text-[9px] font-mono bg-slate-800 text-slate-400 rounded">PENDIENTE</span>
+                        </div>
+                        <span class="text-[11px] text-slate-400">PIN Incorrecto (55)</span>
+                        <span id="latency-reject-pin" class="text-[9px] font-mono text-slate-500">N/A</span>
+                    </div>
+
+                    <!-- Route 6 -->
+                    <div id="card-issuer-down" class="bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col gap-1 transition">
+                        <div class="flex justify-between items-center">
+                            <span class="font-mono text-xs font-bold text-slate-200">/issuer-down</span>
+                            <span id="status-issuer-down" class="px-1.5 py-0.5 text-[9px] font-mono bg-slate-800 text-slate-400 rounded">PENDIENTE</span>
+                        </div>
+                        <span class="text-[11px] text-slate-400">Banco Inoperativo (91)</span>
+                        <span id="latency-issuer-down" class="text-[9px] font-mono text-slate-500">N/A</span>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- ATM Machine Chassis -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 md:p-6 shadow-2xl flex flex-col gap-6 relative">
+                
+                <!-- ATM Header Bar -->
+                <div class="flex justify-between items-center bg-slate-950 px-4 py-2 rounded-xl border border-slate-800 text-xs">
+                    <div class="flex items-center gap-2 text-slate-400">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span id="endpointStatusText">HOST: http://localhost:9080/iso8583</span>
+                    </div>
+                    <div class="text-slate-400 font-mono" id="clockDisplay">00:00:00</div>
+                </div>
+
+                <!-- CRT Monitor Frame -->
+                <div class="bg-slate-950 p-4 rounded-xl border-4 border-slate-800 crt-glow relative overflow-hidden">
+                    <!-- Screen Glass / Scanlines -->
+                    <div class="crt-screen bg-crt-bg text-crt-green font-mono p-6 rounded-lg min-h-[300px] flex flex-col justify-between border border-emerald-950">
+                        
+                        <!-- Top Terminal Header -->
+                        <div class="border-b border-emerald-900/60 pb-2 flex justify-between items-center text-xs">
+                            <span>TERMINAL ISO 8583 v2.5</span>
+                            <span id="terminalModeBadge" class="px-2 py-0.5 text-[10px] bg-emerald-950 text-emerald-400 border border-emerald-800 rounded">PARASOFT LIVE</span>
+                        </div>
+
+                        <!-- ATM Screen Content Area -->
+                        <div id="atmDisplayContent" class="py-4 my-auto flex flex-col items-center justify-center text-center">
+                            <i data-lucide="credit-card" class="w-12 h-12 mb-3 text-crt-green animate-bounce"></i>
+                            <p class="text-base md:text-lg tracking-wider font-bold mb-1">LISTO PARA PRUEBAS</p>
+                            <p class="text-xs text-emerald-400/80 max-w-xs">SELECCIONE UNA RUTA ESCANEDA E INGRESE DATOS PARA EJECUTAR</p>
+                        </div>
+
+                        <!-- Bottom Prompt -->
+                        <div class="border-t border-emerald-900/60 pt-2 flex justify-between items-center text-[11px] text-emerald-400/90">
+                            <span id="atmPromptText">ESTADO: ESPERANDO TRANSACCION</span>
+                            <span class="animate-pulse">_</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ATM Controls Section -->
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+                    
+                    <!-- Physical Pinpad (7 cols) -->
+                    <div class="md:col-span-7 bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-col gap-3">
+                        <div class="text-xs text-slate-400 font-medium flex justify-between items-center">
+                            <span>TECLADO FISICO PINPAD</span>
+                            <i data-lucide="shield-check" class="w-4 h-4 text-emerald-400"></i>
+                        </div>
+                        
+                        <!-- Pinpad Grid -->
+                        <div class="grid grid-cols-3 gap-2">
+                            <button onclick="pressKey('1')" class="h-10 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-lg text-slate-100 font-mono text-base font-bold shadow border border-slate-700">1</button>
+                            <button onclick="pressKey('2')" class="h-10 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-lg text-slate-100 font-mono text-base font-bold shadow border border-slate-700">2</button>
+                            <button onclick="pressKey('3')" class="h-10 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-lg text-slate-100 font-mono text-base font-bold shadow border border-slate-700">3</button>
+                            
+                            <button onclick="pressKey('4')" class="h-10 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-lg text-slate-100 font-mono text-base font-bold shadow border border-slate-700">4</button>
+                            <button onclick="pressKey('5')" class="h-10 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-lg text-slate-100 font-mono text-base font-bold shadow border border-slate-700">5</button>
+                            <button onclick="pressKey('6')" class="h-10 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-lg text-slate-100 font-mono text-base font-bold shadow border border-slate-700">6</button>
+                            
+                            <button onclick="pressKey('7')" class="h-10 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-lg text-slate-100 font-mono text-base font-bold shadow border border-slate-700">7</button>
+                            <button onclick="pressKey('8')" class="h-10 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-lg text-slate-100 font-mono text-base font-bold shadow border border-slate-700">8</button>
+                            <button onclick="pressKey('9')" class="h-10 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-lg text-slate-100 font-mono text-base font-bold shadow border border-slate-700">9</button>
+                            
+                            <button onclick="pressKey('CANCEL')" class="h-10 bg-amber-600 hover:bg-amber-500 active:bg-amber-700 rounded-lg text-slate-950 font-bold text-[10px] uppercase shadow border border-amber-500 flex items-center justify-center">CANCEL</button>
+                            <button onclick="pressKey('0')" class="h-10 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-lg text-slate-100 font-mono text-base font-bold shadow border border-slate-700">0</button>
+                            <button onclick="pressKey('ENTER')" class="h-10 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 rounded-lg text-slate-950 font-bold text-[10px] uppercase shadow border border-emerald-500 flex items-center justify-center">ENTER</button>
+                        </div>
+                    </div>
+
+                    <!-- Card & Settings (5 cols) -->
+                    <div class="md:col-span-5 flex flex-col gap-3 justify-between">
+                        
+                        <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 flex flex-col gap-2">
+                            <label class="text-[11px] text-slate-400 font-medium">NUMERO DE TARJETA (PAN)</label>
+                            <input type="text" id="inputCardPAN" value="4500123456789012" maxlength="16" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs font-mono text-emerald-400 focus:outline-none focus:border-emerald-500">
+                            
+                            <div class="grid grid-cols-2 gap-2 mt-0.5">
+                                <div>
+                                    <label class="text-[10px] text-slate-400">MONTO ($)</label>
+                                    <input type="number" id="inputAmount" value="50000" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs font-mono text-emerald-400">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] text-slate-400">PIN (4 DIGITOS)</label>
+                                    <input type="password" id="inputPin" value="1234" maxlength="4" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs font-mono text-emerald-400">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Target Endpoint Selector -->
+                        <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800 flex flex-col gap-1.5">
+                            <label class="text-[10px] text-slate-400 font-medium flex justify-between">
+                                <span>SELECCIONAR RUTA TARGET:</span>
+                                <span class="text-emerald-400 font-bold" id="selectedCodeBadge">Code 00</span>
+                            </label>
+                            <select id="endpointRouteSelect" onchange="updateSelectedEndpoint()" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
+                                <option value="/authorize" data-code="00">1. /authorize (Code 00 - Aprobada)</option>
+                                <option value="/reject-funds" data-code="51">2. /reject-funds (Code 51 - Fondos Insuficientes)</option>
+                                <option value="/invalid-card" data-code="14">3. /invalid-card (Code 14 - Tarjeta Inválida)</option>
+                                <option value="/reject-expired" data-code="54">4. /reject-expired (Code 54 - Tarjeta Vencida)</option>
+                                <option value="/reject-pin" data-code="55">5. /reject-pin (Code 55 - PIN Incorrecto)</option>
+                                <option value="/issuer-down" data-code="91">6. /issuer-down (Code 91 - Banco Inoperativo)</option>
+                            </select>
+                        </div>
+
+                        <!-- Execute Withdrawal Button -->
+                        <button onclick="executeTransaction()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-slate-950 font-bold rounded-xl shadow-lg transition flex items-center justify-center gap-2 text-xs">
+                            <i data-lucide="arrow-down-right" class="w-4 h-4"></i>
+                            <span>SOLICITAR RETIRO EN VIVO</span>
+                        </button>
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+        <!-- RIGHT COLUMN: ISO 8583 Inspector & Receipt (5 cols) -->
+        <section class="lg:col-span-5 flex flex-col gap-4">
+            
+            <!-- ISO 8583 Inspector Panel -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex-1 flex flex-col">
+                
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="binary" class="w-5 h-5 text-emerald-400"></i>
+                        <h2 class="font-bold text-slate-100 text-sm">Inspector Trama ISO 8583</h2>
+                    </div>
+                    <span id="lastHttpStatus" class="px-2 py-0.5 text-[10px] font-mono bg-slate-800 text-slate-400 rounded border border-slate-700">READY</span>
+                </div>
+
+                <!-- Tabs header -->
+                <div class="flex border-b border-slate-800 mb-4 text-xs">
+                    <button id="tabBtnDecoded" onclick="switchInspectorTab('decoded')" class="px-3 py-2 border-b-2 border-emerald-500 text-emerald-400 font-medium">Campos ISO 8583</button>
+                    <button id="tabBtnRaw" onclick="switchInspectorTab('raw')" class="px-3 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 font-medium">JSON HTTP Parasoft</button>
+                    <button id="tabBtnReceipt" onclick="switchInspectorTab('receipt')" class="px-3 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 font-medium">Voucher Térmico</button>
+                </div>
+
+                <!-- TAB 1: ISO 8583 Breakdown -->
+                <div id="tabContentDecoded" class="flex-1 flex flex-col gap-3 overflow-y-auto max-h-[500px] pr-1 custom-scrollbar">
+                    
+                    <!-- Hexadecimal String Container -->
+                    <div class="bg-slate-950 p-3 rounded-lg border border-slate-800">
+                        <span class="text-[10px] text-slate-500 font-mono block mb-1">TRAMA RAW HEXADECIMAL DE RESPUESTA</span>
+                        <p id="isoHexDisplay" class="font-mono text-xs text-amber-400 break-all select-all">
+                            ESPERANDO RESPUESTA EN VIVO DEL HOST...
+                        </p>
+                    </div>
+
+                    <!-- Fields Table -->
+                    <div class="space-y-2 text-xs font-mono">
+                        <div class="bg-slate-950 p-2.5 rounded border border-slate-800 flex justify-between">
+                            <span class="text-slate-400">MTI (Message Type):</span>
+                            <span id="fMTI" class="text-emerald-400 font-bold">0210 (Financial Resp)</span>
+                        </div>
+                        <div class="bg-slate-950 p-2.5 rounded border border-slate-800 flex justify-between">
+                            <span class="text-slate-400">Primary Bitmap:</span>
+                            <span id="fBitmap" class="text-slate-200">7020000000000000</span>
+                        </div>
+                        <div class="bg-slate-950 p-2.5 rounded border border-slate-800 flex justify-between">
+                            <span class="text-slate-400">DE-002 (Primary Account Number):</span>
+                            <span id="fDE2" class="text-slate-200">450012******9012</span>
+                        </div>
+                        <div class="bg-slate-950 p-2.5 rounded border border-slate-800 flex justify-between">
+                            <span class="text-slate-400">DE-003 (Processing Code):</span>
+                            <span id="fDE3" class="text-slate-200">011000 (Withdrawal)</span>
+                        </div>
+                        <div class="bg-slate-950 p-2.5 rounded border border-slate-800 flex justify-between">
+                            <span class="text-slate-400">DE-004 (Transaction Amount):</span>
+                            <span id="fDE4" class="text-emerald-400 font-bold">$000000050000</span>
+                        </div>
+                        <div class="bg-slate-950 p-2.5 rounded border border-slate-800 flex justify-between">
+                            <span class="text-slate-400">DE-011 (STAN - Trace Number):</span>
+                            <span id="fDE11" class="text-slate-200">000842</span>
+                        </div>
+                        <div class="bg-slate-950 p-2.5 rounded border border-slate-800 flex justify-between">
+                            <span class="text-slate-400">DE-039 (Response Code):</span>
+                            <span id="fDE39" class="text-slate-400 font-bold bg-slate-900 px-2 py-0.5 rounded border border-slate-800">-- (PENDIENTE)</span>
+                        </div>
+                        <div class="bg-slate-950 p-2.5 rounded border border-slate-800 flex justify-between">
+                            <span class="text-slate-400">DE-038 (Auth Identification):</span>
+                            <span id="fDE38" class="text-slate-200">N/A</span>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- TAB 2: Parasoft Raw JSON -->
+                <div id="tabContentRaw" class="hidden flex-1 flex flex-col">
+                    <pre id="jsonRawDisplay" class="bg-slate-950 p-4 rounded-lg border border-slate-800 font-mono text-xs text-emerald-400 overflow-x-auto flex-1 max-h-[450px]">
+{
+  "status": "Esperando ejecución..."
+}
+                    </pre>
+                </div>
+
+                <!-- TAB 3: Thermal Receipt Voucher -->
+                <div id="tabContentReceipt" class="hidden flex-1 flex flex-col items-center justify-center p-2">
+                    <!-- Paper Ticket -->
+                    <div id="receiptPaper" class="bg-amber-50 text-slate-900 font-mono p-6 rounded shadow-lg w-full max-w-xs text-xs border border-amber-200 space-y-3">
+                        <div class="text-center border-b border-dashed border-slate-400 pb-2">
+                            <p class="font-bold text-sm">BANCO CREDITO 1984</p>
+                            <p class="text-[10px] text-slate-600">TERMINAL ATM ISO-8583</p>
+                            <p class="text-[10px] text-slate-600" id="receiptDate">2026-10-26 16:30:00</p>
+                        </div>
+
+                        <div class="space-y-1 text-[11px]">
+                            <div class="flex justify-between">
+                                <span>TARJETA:</span>
+                                <span id="rCard">450012******9012</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>OPERACION:</span>
+                                <span>RETIRO DE EFECTIVO</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>MONTO:</span>
+                                <span id="rAmount" class="font-bold">$ 50.000</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>COD. RESPUESTA:</span>
+                                <span id="rCode" class="font-bold">--</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>AUTORIZACION:</span>
+                                <span id="rAuth">N/A</span>
+                            </div>
+                        </div>
+
+                        <div class="border-t border-dashed border-slate-400 pt-2 text-center text-[10px] space-y-1">
+                            <p id="rStatusText" class="font-bold text-slate-700">ESPERANDO TRANSACCION</p>
+                            <p class="text-slate-500 font-semibold uppercase mt-1">DESARROLLADO POR VÍCTOR CARREÑO</p>
+                            <p class="text-slate-400 text-[9px]">INGENIERO EN INFORMÁTICA / QA</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-900 border-t border-slate-800 py-3 px-6 text-center text-xs text-slate-400">
+        <p>© 2026 Entorno de Simulación ISO 8583 & Parasoft Virtualize | Diseñado y Desarrollado por <strong class="text-slate-200">Víctor Carreño</strong></p>
+    </footer>
+
+    <!-- Configuration Modal -->
+    <div id="configModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl flex flex-col gap-4">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h3 class="font-bold text-white text-base flex items-center gap-2">
+                    <i data-lucide="server" class="w-5 h-5 text-emerald-400"></i>
+                    <span>Configurar Servidor Parasoft</span>
+                </h3>
+                <button onclick="toggleConfigModal()" class="text-slate-400 hover:text-white">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block text-slate-400 mb-1">Host Base Parasoft Virtualize (Localhost por defecto):</label>
+                    <input type="text" id="cfgBaseUrl" value="http://localhost:9080/iso8583" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 font-mono text-emerald-400">
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="toggleConfigModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium">Cerrar</button>
+                <button onclick="saveConfig()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold rounded-lg text-xs">Guardar Cambios</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Logic -->
+    <script>
+        let config = {
+            baseUrl: 'http://localhost:9080/iso8583'
+        };
+
+        const ROUTES = [
+            { id: 'authorize', path: '/authorize' },
+            { id: 'reject-funds', path: '/reject-funds' },
+            { id: 'invalid-card', path: '/invalid-card' },
+            { id: 'reject-expired', path: '/reject-expired' },
+            { id: 'reject-pin', path: '/reject-pin' },
+            { id: 'issuer-down', path: '/issuer-down' }
+        ];
+
+        window.onload = function() {
+            lucide.createIcons();
+            updateClock();
+            setInterval(updateClock, 1000);
+            updateSelectedEndpoint();
+            scanParasoftRoutes();
+        };
+
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clockDisplay').innerText = now.toTimeString().split(' ')[0];
+        }
+
+        function updateSelectedEndpoint() {
+            const select = document.getElementById('endpointRouteSelect');
+            const selectedOption = select.options[select.selectedIndex];
+            const code = selectedOption.getAttribute('data-code');
+            document.getElementById('selectedCodeBadge').innerText = `Code ${code}`;
+        }
+
+        async function scanParasoftRoutes() {
+            let activeCount = 0;
+
+            for (const route of ROUTES) {
+                const targetUrl = `${config.baseUrl}${route.path}`;
+                const cardEl = document.getElementById(`card-${route.id}`);
+                const statusEl = document.getElementById(`status-${route.id}`);
+                const latencyEl = document.getElementById(`latency-${route.id}`);
+
+                statusEl.innerText = "TESTING...";
+                statusEl.className = "px-1.5 py-0.5 text-[9px] font-mono bg-amber-950 text-amber-400 rounded border border-amber-800 animate-pulse";
+
+                const startTime = performance.now();
+                try {
+                    const response = await fetch(targetUrl, { method: 'GET' });
+                    const endTime = performance.now();
+                    const duration = Math.round(endTime - startTime);
+
+                    if (response.ok) {
+                        activeCount++;
+                        statusEl.innerText = "ONLINE (200)";
+                        statusEl.className = "px-1.5 py-0.5 text-[9px] font-mono bg-emerald-950 text-emerald-400 rounded border border-emerald-800";
+                        cardEl.className = "bg-slate-950 border border-emerald-800/60 rounded-xl p-3 flex flex-col gap-1 transition";
+                        latencyEl.innerText = `${duration} ms`;
+                    } else {
+                        statusEl.innerText = `HTTP ${response.status}`;
+                        statusEl.className = "px-1.5 py-0.5 text-[9px] font-mono bg-red-950 text-red-400 rounded border border-red-800";
+                        cardEl.className = "bg-slate-950 border border-red-900/40 rounded-xl p-3 flex flex-col gap-1 transition";
+                        latencyEl.innerText = `${duration} ms`;
+                    }
+                } catch (err) {
+                    statusEl.innerText = "OFFLINE";
+                    statusEl.className = "px-1.5 py-0.5 text-[9px] font-mono bg-red-950 text-red-400 rounded border border-red-800";
+                    cardEl.className = "bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col gap-1 transition opacity-70";
+                    latencyEl.innerText = "N/A";
+                }
+            }
+
+            const pingBadge = document.getElementById('pingBadge');
+            const pingText = document.getElementById('pingText');
+
+            if (activeCount > 0) {
+                pingBadge.className = "flex items-center gap-2 px-3 py-1.5 bg-emerald-950/80 border border-emerald-800 text-emerald-400 rounded-lg text-xs font-mono";
+                pingText.innerText = `PARASOFT ONLINE (${activeCount}/6 RUTAS)`;
+            } else {
+                pingBadge.className = "flex items-center gap-2 px-3 py-1.5 bg-red-950/80 border border-red-800 text-red-400 rounded-lg text-xs font-mono";
+                pingText.innerText = "HOST OFFLINE / SIN CONEXION";
+            }
+        }
+
+        async function executeTransaction() {
+            const pan = document.getElementById('inputCardPAN').value || "4500123456789012";
+            const amount = document.getElementById('inputAmount').value || "50000";
+            const route = document.getElementById('endpointRouteSelect').value;
+            const targetUrl = `${config.baseUrl}${route}`;
+
+            setAtmDisplayState('PROCESSING');
+
+            try {
+                const response = await fetch(targetUrl, { method: 'GET' });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP Error Status ${response.status}`);
+                }
+
+                const responseData = await response.json();
+                
+                document.getElementById('lastHttpStatus').innerText = `HTTP ${response.status} OK`;
+                document.getElementById('lastHttpStatus').className = "px-2 py-0.5 text-[10px] font-mono bg-emerald-950 text-emerald-400 rounded border border-emerald-800";
+
+                renderTransactionResult(responseData, pan, amount);
+
+            } catch (error) {
+                console.error("Error al consultar Parasoft Virtualize:", error);
+
+                document.getElementById('lastHttpStatus').innerText = `SIN CONEXION / HOST DOWN`;
+                document.getElementById('lastHttpStatus').className = "px-2 py-0.5 text-[10px] font-mono bg-red-950 text-red-400 rounded border border-red-800";
+
+                const displayArea = document.getElementById('atmDisplayContent');
+                const promptText = document.getElementById('atmPromptText');
+
+                displayArea.innerHTML = `
+                    <i data-lucide="wifi-off" class="w-12 h-12 mb-3 text-crt-red animate-pulse"></i>
+                    <p class="text-base md:text-lg tracking-wider font-bold mb-1 text-crt-red">ERROR DE COMUNICACION</p>
+                    <p class="text-xs text-crt-red/90 font-bold">NO SE PUDO CONECTAR AL HOST PARASOFT</p>
+                    <p class="text-[11px] text-slate-400 mt-2">VERIFIQUE QUE EL SERVIDOR ESTE EN LÍNEA</p>
+                `;
+                promptText.innerText = "ESTADO: SERVIDOR PARASOFT OFFLINE";
+
+                lucide.createIcons();
+
+                document.getElementById('isoHexDisplay').innerText = "SIN DATOS (HOST NO RESPONDE)";
+                document.getElementById('jsonRawDisplay').innerText = JSON.stringify({
+                    error: "Conexión rechazada o timeout",
+                    detail: error.message,
+                    targetUrl: targetUrl
+                }, null, 2);
+
+                const de39 = document.getElementById('fDE39');
+                de39.innerText = "ERR (OFFLINE)";
+                de39.className = "text-red-400 font-bold bg-red-950 px-2 py-0.5 rounded border border-red-800";
+            }
+        }
+
+        function renderTransactionResult(data, pan, amount) {
+            const isSuccess = data.responseCode === "00";
+            
+            const displayArea = document.getElementById('atmDisplayContent');
+            const promptText = document.getElementById('atmPromptText');
+
+            if (isSuccess) {
+                displayArea.innerHTML = `
+                    <i data-lucide="check-circle" class="w-12 h-12 mb-3 text-emerald-400 animate-pulse"></i>
+                    <p class="text-base md:text-lg tracking-wider font-bold mb-1 text-emerald-400">TRANSACCION APROBADA</p>
+                    <p class="text-xs text-emerald-300/80">RETIRE SU DINERO Y EL COMPROBANTE</p>
+                    <p class="text-xs font-bold mt-2 text-white">AUT: ${data.authorizationId || '849201'}</p>
+                `;
+                promptText.innerText = "ESTADO: TRANSACCION COMPLETADA";
+            } else {
+                displayArea.innerHTML = `
+                    <i data-lucide="x-circle" class="w-12 h-12 mb-3 text-crt-red animate-pulse"></i>
+                    <p class="text-base md:text-lg tracking-wider font-bold mb-1 text-crt-red">TRANSACCION RECHAZADA</p>
+                    <p class="text-xs text-crt-red/90 font-bold">${data.responseDescription || 'ERROR EN TRANSACCION'}</p>
+                    <p class="text-[11px] text-emerald-400/70 mt-1">CODIGO ISO 8583: [${data.responseCode}]</p>
+                `;
+                promptText.innerText = `ESTADO: RECHAZADA (${data.responseCode})`;
+            }
+
+            lucide.createIcons();
+
+            document.getElementById('isoHexDisplay').innerText = data.simulatedIso8583Hex || "651038303030202020202020...";
+            document.getElementById('fDE2').innerText = maskPan(pan);
+            document.getElementById('fDE4').innerText = `$${String(amount * 100).padStart(12, '0')}`;
+            
+            const de39 = document.getElementById('fDE39');
+            de39.innerText = `${data.responseCode} (${isSuccess ? 'APROBADA' : 'RECHAZADA'})`;
+            de39.className = isSuccess 
+                ? "text-emerald-400 font-bold bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800"
+                : "text-red-400 font-bold bg-red-950 px-2 py-0.5 rounded border border-red-800";
+
+            document.getElementById('fDE38').innerText = data.authorizationId || 'N/A';
+            document.getElementById('jsonRawDisplay').innerText = JSON.stringify(data, null, 2);
+
+            document.getElementById('rCard').innerText = maskPan(pan);
+            document.getElementById('rAmount').innerText = `$ ${Number(amount).toLocaleString('es-CL')}`;
+            document.getElementById('rCode').innerText = data.responseCode;
+            document.getElementById('rAuth').innerText = data.authorizationId || 'N/A';
+            
+            const rStatus = document.getElementById('rStatusText');
+            rStatus.innerText = data.responseDescription || 'TRANSACCION COMPLETADA';
+            rStatus.className = isSuccess ? "font-bold text-emerald-700" : "font-bold text-red-600";
+
+            const now = new Date();
+            document.getElementById('receiptDate').innerText = now.toISOString().replace('T', ' ').substring(0, 19);
+        }
+
+        function setAtmDisplayState(state) {
+            if (state === 'PROCESSING') {
+                document.getElementById('atmDisplayContent').innerHTML = `
+                    <div class="inline-block animate-spin rounded-full h-10 w-10 border-4 border-emerald-500 border-t-transparent mb-3"></div>
+                    <p class="text-base tracking-wider font-bold mb-1 animate-pulse">PROCESANDO TRANSACCION...</p>
+                    <p class="text-xs text-emerald-400/80">CONECTANDO CON HOST ISO 8583</p>
+                `;
+                document.getElementById('atmPromptText').innerText = "ESTADO: ESPERANDO RESPUESTA HOST";
+            }
+        }
+
+        function pressKey(key) {
+            const pinInput = document.getElementById('inputPin');
+            if (key === 'CANCEL') {
+                pinInput.value = '';
+            } else if (key === 'ENTER') {
+                executeTransaction();
+            } else if (!isNaN(key)) {
+                if (pinInput.value.length < 4) {
+                    pinInput.value += key;
+                }
+            }
+        }
+
+        function maskPan(pan) {
+            if (pan.length < 10) return pan;
+            return `${pan.substring(0, 6)}******${pan.substring(pan.length - 4)}`;
+        }
+
+        function switchInspectorTab(tab) {
+            const btnDecoded = document.getElementById('tabBtnDecoded');
+            const btnRaw = document.getElementById('tabBtnRaw');
+            const btnReceipt = document.getElementById('tabBtnReceipt');
+
+            const contentDecoded = document.getElementById('tabContentDecoded');
+            const contentRaw = document.getElementById('tabContentRaw');
+            const contentReceipt = document.getElementById('tabContentReceipt');
+
+            [btnDecoded, btnRaw, btnReceipt].forEach(btn => btn.className = "px-3 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 font-medium");
+            [contentDecoded, contentRaw, contentReceipt].forEach(content => content.classList.add('hidden'));
+
+            if (tab === 'decoded') {
+                btnDecoded.className = "px-3 py-2 border-b-2 border-emerald-500 text-emerald-400 font-medium";
+                contentDecoded.classList.remove('hidden');
+            } else if (tab === 'raw') {
+                btnRaw.className = "px-3 py-2 border-b-2 border-emerald-500 text-emerald-400 font-medium";
+                contentRaw.classList.remove('hidden');
+            } else if (tab === 'receipt') {
+                btnReceipt.className = "px-3 py-2 border-b-2 border-emerald-500 text-emerald-400 font-medium";
+                contentReceipt.classList.remove('hidden');
+            }
+        }
+
+        function toggleConfigModal() {
+            document.getElementById('configModal').classList.toggle('hidden');
+        }
+
+        function saveConfig() {
+            const newUrl = document.getElementById('cfgBaseUrl').value.replace(/\/$/, "");
+            config.baseUrl = newUrl;
+            document.getElementById('endpointStatusText').innerText = `HOST: ${newUrl}`;
+            toggleConfigModal();
+            scanParasoftRoutes();
+        }
+    </script>
+</body>
+</html>
